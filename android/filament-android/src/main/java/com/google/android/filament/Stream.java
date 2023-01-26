@@ -169,6 +169,27 @@ public class Stream {
             return this;
         }
 
+                /**
+         * Creates a {@link StreamType#TEXTURE_ID TEXTURE_ID} stream. A copy stream will sample data from the supplied
+         * external texture and copy it into an internal private texture.
+         *
+         * <p>Currently only OpenGL external texture ids are supported.</p>
+         *
+         * @param externalTextureId An opaque texture id (typically a GLuint created with
+         *                          <code>glGenTextures()</code>) in a context shared with
+         *                          filament -- in that case this texture's target must be
+         *                          <code>GL_TEXTURE_EXTERNAL_OES.</code>
+         * @return This Builder, for chaining calls.
+         * @see Texture#setExternalStream
+         * @deprecated this method existed only for ARCore which doesn't need this anymore, use {@link Texture.Builder#importTexture(long)} instead.
+         */
+        @Deprecated
+        @NonNull
+        public Builder stream(long externalTextureId) {
+            nBuilderStream(mNativeBuilder, externalTextureId);
+            return this;
+        }
+        
         /**
          * Creates a new <code>Stream</code> object instance.
          *
@@ -269,6 +290,7 @@ public class Stream {
     private static native long nCreateBuilder();
     private static native void nDestroyBuilder(long nativeStreamBuilder);
     private static native void nBuilderStreamSource(long nativeStreamBuilder, Object streamSource);
+    private static native void nBuilderStream(long nativeStreamBuilder, long externalTextureId);
     private static native void nBuilderWidth(long nativeStreamBuilder, int width);
     private static native void nBuilderHeight(long nativeStreamBuilder, int height);
     private static native long nBuilderBuild(long nativeStreamBuilder, long nativeEngine);
