@@ -86,12 +86,20 @@ bool ShaderExtractor::getShader(ShaderModel shaderModel,
             uint8_t(shaderModel), variant, uint8_t(stage));
 }
 
-CString ShaderExtractor::spirvToGLSL(const uint32_t* data, size_t wordCount) {
+CString ShaderExtractor::spirvToGLSL(ShaderModel shaderModel, const uint32_t* data,
+        size_t wordCount) {
     using namespace spirv_cross;
 
     CompilerGLSL::Options emitOptions;
-    emitOptions.es = false;
-    emitOptions.version = 410;
+    if (shaderModel == ShaderModel::MOBILE) {
+        emitOptions.es = true;
+        emitOptions.version = 310;
+        emitOptions.fragment.default_float_precision = CompilerGLSL::Options::Precision::Mediump;
+        emitOptions.fragment.default_int_precision = CompilerGLSL::Options::Precision::Mediump;
+    } else if (shaderModel == ShaderModel::DESKTOP) {
+        emitOptions.es = false;
+        emitOptions.version = 450;
+    }
     emitOptions.vulkan_semantics = true;
 
     std::vector<uint32_t> spirv(data, data + wordCount);
@@ -105,8 +113,9 @@ CString ShaderExtractor::spirvToGLSL(const uint32_t* data, size_t wordCount) {
 // but please do not submit. We prefer to use the syntax that the standalone "spirv-dis" tool
 // uses, which lets us easily generate test cases for the spirv-cross project.
 CString ShaderExtractor::spirvToText(const uint32_t* begin, size_t wordCount) {
-    spv_context context = spvContextCreate(SPV_ENV_UNIVERSAL_1_0);
-    if (SPV_SUCCESS != spvValidateBinary(context, begin, wordCount, nullptr)) {
+    spv_context context = spvContextCreate(SPV_ENV_UNIVERSAL_1_3);
+
+    if (spvValidateBinary(context, begin, wordCount, nullptr) != SPV_SUCCESS) {
         spvContextDestroy(context);
         return CString("Validation failure.");
     }

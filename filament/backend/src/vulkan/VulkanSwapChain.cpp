@@ -23,6 +23,10 @@
 using namespace bluevk;
 using namespace utils;
 
+namespace {
+constexpr uint32_t VULKAN_UNDEFINED_EXTENT = 0xFFFFFFFF;
+} // anonymous namespace
+
 namespace filament::backend {
 
 bool VulkanSwapChain::acquire() {
@@ -127,8 +131,12 @@ void VulkanSwapChain::create(VulkanStagePool& stagePool) {
     ASSERT_POSTCONDITION(foundSuitablePresentMode, "Desired present mode is not supported by this device.");
 
     // Create the low-level swap chain.
-
-    clientSize = caps.currentExtent;
+    if (caps.currentExtent.width == VULKAN_UNDEFINED_EXTENT ||
+        caps.currentExtent.height == VULKAN_UNDEFINED_EXTENT) {
+        clientSize = mFallbackExtent;
+    } else {
+        clientSize = caps.currentExtent;
+    }
 
     const VkCompositeAlphaFlagBitsKHR compositeAlpha = (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) ?
             VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -251,54 +259,26 @@ static void getPresentationQueue(VulkanContext& mContext, VulkanSwapChain& sc) {
     FixedCapacityVector<VkQueueFamilyProperties> queueFamiliesProperties(queueFamiliesCount);
     vkGetPhysicalDeviceQueueFamilyProperties(mContext.physicalDevice, &queueFamiliesCount,
             queueFamiliesProperties.data());
-    uint32_t presentQueueFamilyIndex = 0xffff;
 
     // We prefer the graphics and presentation queues to be the same, so first check if that works.
     // On most platforms they must be the same anyway, and this avoids issues with MoltenVK.
     VkBool32 supported = VK_FALSE;
     vkGetPhysicalDeviceSurfaceSupportKHR(mContext.physicalDevice, mContext.graphicsQueueFamilyIndex,
             sc.surface, &supported);
-    if (supported) {
-        presentQueueFamilyIndex = mContext.graphicsQueueFamilyIndex;
-    }
 
-    // Otherwise fall back to separate graphics and presentation queues.
-    if (presentQueueFamilyIndex == 0xffff) {
-        for (uint32_t j = 0; j < queueFamiliesCount; ++j) {
-            vkGetPhysicalDeviceSurfaceSupportKHR(mContext.physicalDevice, j, sc.surface, &supported);
-            if (supported) {
-                presentQueueFamilyIndex = j;
-                break;
-            }
-        }
-    }
-    ASSERT_POSTCONDITION(presentQueueFamilyIndex != 0xffff,
-            "This physical device does not support the presentation queue.");
-    if (mContext.graphicsQueueFamilyIndex != presentQueueFamilyIndex) {
+    // We assume that the chosen graphics queues are able to present. See also
+    // https://github.com/google/filament/issues/1532
+    ASSERT_POSTCONDITION(supported, "Graphics queues do not support presentation.");
 
-        // TODO: Strictly speaking, this code path is incorrect. However it is not triggered on any
-        // Android devices that we've tested with, nor with MoltenVK.
-        //
-        // This is incorrect because we created the logical device early on, before we had a handle
-        // to the rendering surface. Therefore the device was not created with the presentation
-        // queue family index included in VkDeviceQueueCreateInfo.
-        //
-        // This is non-trivial to fix because the driver API allows clients to do certain things
-        // (e.g. upload a vertex buffer) before the swap chain is created.
-        //
-        // https://github.com/google/filament/issues/1532
-        vkGetDeviceQueue(mContext.device, presentQueueFamilyIndex, 0, &sc.presentQueue);
-
-    } else {
-        sc.presentQueue = mContext.graphicsQueue;
-    }
-    ASSERT_POSTCONDITION(sc.presentQueue, "Unable to obtain presentation queue.");
+    sc.presentQueue = mContext.graphicsQueue;
     sc.headlessQueue = VK_NULL_HANDLE;
 }
 
 // Primary SwapChain constructor. (not headless)
-VulkanSwapChain::VulkanSwapChain(VulkanContext& context, VulkanStagePool& stagePool, VkSurfaceKHR vksurface) :
-        mContext(context) {
+VulkanSwapChain::VulkanSwapChain(VulkanContext& context, VulkanStagePool& stagePool, VkSurfaceKHR vksurface,
+        VkExtent2D fallbackExtent) :
+        mContext(context),
+        mFallbackExtent(fallbackExtent) {
     suboptimal = false;
     surface = vksurface;
     firstRenderPass = true;
@@ -341,9 +321,15 @@ bool VulkanSwapChain::hasResized() const {
     if (surface == VK_NULL_HANDLE) {
         return false;
     }
-    VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mContext.physicalDevice, surface, &surfaceCapabilities);
-    return !equivalent(clientSize, surfaceCapabilities.currentExtent);
+    VkSurfaceCapabilitiesKHR caps;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mContext.physicalDevice, surface, &caps);
+    VkExtent2D perceivedExtent = caps.currentExtent;
+    // Create the low-level swap chain.
+    if (caps.currentExtent.width == VULKAN_UNDEFINED_EXTENT ||
+        caps.currentExtent.height == VULKAN_UNDEFINED_EXTENT) {
+        perceivedExtent = mFallbackExtent;
+    }
+    return !equivalent(clientSize, perceivedExtent);
 }
 
 VulkanTexture& VulkanSwapChain::getColorTexture() {

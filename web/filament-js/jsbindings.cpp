@@ -544,7 +544,8 @@ class_<Engine>("Engine")
 
 /// SwapChain ::core class:: Represents the platform's native rendering surface.
 /// See also the [Engine] methods `createSwapChain` and `destroySwapChain`.
-class_<SwapChain>("SwapChain");
+class_<SwapChain>("SwapChain")
+        .class_function("isSRGBSwapChainSupported", &SwapChain::isSRGBSwapChainSupported);
 
 /// Renderer ::core class:: Represents the platform's native window.
 /// See also the [Engine] methods `createRenderer` and `destroyRenderer`.
@@ -572,7 +573,6 @@ class_<Renderer>("Renderer")
 /// A view is associated with a particular [Scene], [Camera], and viewport.
 /// See also the [Engine] methods `createView` and `destroyView`.
 class_<View>("View")
-
     .function("pick", EMBIND_LAMBDA(void, (View* self, uint32_t x, uint32_t y, val cb), {
         self->pick(x, y, [cb](const View::PickingQueryResult& result) {
             EM_ASM_ARGS({
@@ -896,6 +896,9 @@ class_<RenderableBuilder>("RenderableManager$Builder")
     .BUILDER_FUNCTION("priority", RenderableBuilder, (RenderableBuilder* builder, uint8_t value), {
         return &builder->priority(value); })
 
+    .BUILDER_FUNCTION("channel", RenderableBuilder, (RenderableBuilder* builder, uint8_t value), {
+        return &builder->channel(value); })
+
     .BUILDER_FUNCTION("culling", RenderableBuilder, (RenderableBuilder* builder, bool enable), {
         return &builder->culling(enable); })
 
@@ -965,6 +968,7 @@ class_<RenderableManager>("RenderableManager")
     .function("setAxisAlignedBoundingBox", &RenderableManager::setAxisAlignedBoundingBox)
     .function("setLayerMask", &RenderableManager::setLayerMask)
     .function("setPriority", &RenderableManager::setPriority)
+    .function("setChannel", &RenderableManager::setChannel)
     .function("setCastShadows", &RenderableManager::setCastShadows)
     .function("setReceiveShadows", &RenderableManager::setReceiveShadows)
     .function("isShadowCaster", &RenderableManager::isShadowCaster)

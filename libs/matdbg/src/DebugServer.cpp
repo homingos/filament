@@ -70,20 +70,14 @@ static const std::string_view kErrorHeader =
         "Connection: close\r\n\r\n";
 
 static void spirvToAsm(struct mg_connection *conn, const uint32_t* spirv, size_t size) {
-    auto context = spvContextCreate(SPV_ENV_UNIVERSAL_1_0);
-    spv_text text = nullptr;
-    const uint32_t options = SPV_BINARY_TO_TEXT_OPTION_INDENT |
-            SPV_BINARY_TO_TEXT_OPTION_FRIENDLY_NAMES;
-    spvBinaryToText(context, spirv, size / 4, options, &text, nullptr);
-
+    auto spirvDisassembly = ShaderExtractor::spirvToText(spirv, size / 4);
     mg_printf(conn, kSuccessHeader.data(), "application/txt");
-    mg_write(conn, text->str, text->length);
-    spvTextDestroy(text);
-    spvContextDestroy(context);
+    mg_write(conn, spirvDisassembly.c_str(), spirvDisassembly.size());
 }
 
-static void spirvToGlsl(struct mg_connection *conn, const uint32_t* spirv, size_t size) {
-    auto glsl = ShaderExtractor::spirvToGLSL(spirv, size / 4);
+static void spirvToGlsl(ShaderModel shaderModel, struct mg_connection *conn,
+        const uint32_t* spirv, size_t size) {
+    auto glsl = ShaderExtractor::spirvToGLSL(shaderModel, spirv, size / 4);
     mg_printf(conn, kSuccessHeader.data(), "application/txt");
     mg_printf(conn, glsl.c_str(), glsl.size());
 }
@@ -335,7 +329,7 @@ public:
             }
 
             if (language == glsl) {
-                spirvToGlsl(conn, (const uint32_t*) content.data(), content.size());
+                spirvToGlsl(item.shaderModel, conn, (const uint32_t*) content.data(), content.size());
                 return true;
             }
 
